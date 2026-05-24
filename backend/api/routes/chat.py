@@ -1,59 +1,60 @@
 from fastapi import APIRouter
-import ollama
+from pydantic import BaseModel
 
-from backend.api.schemas.chat_schema import ChatRequest
-from backend.memory.short_term import conversation_history
+from backend.agents.chat_agent import generate_response
+
+from backend.memory.short_term import (
+    create_chat,
+    get_all_chats,
+    load_chat_messages
+)
 
 router = APIRouter()
 
-SYSTEM_PROMPT = """
-You are a powerful personal AI assistant.
-Be helpful, intelligent, and concise.
-"""
+
+class ChatRequest(BaseModel):
+    chat_id: int
+    message: str
+
+
+@router.post("/chat/new")
+def new_chat():
+
+    chat_id = create_chat()
+
+    return {
+        "chat_id": chat_id
+    }
+
+
+@router.get("/chats")
+def chats():
+
+    chats = get_all_chats()
+
+    return {
+        "chats": chats
+    }
+
+
+@router.get("/chat/{chat_id}")
+def get_chat(chat_id: int):
+
+    messages = load_chat_messages(chat_id)
+
+    return {
+        "messages": messages
+    }
+
 
 @router.post("/chat")
-async def chat(user_message: ChatRequest):
+async def chat(request: ChatRequest):
 
-    try:
+    response = await generate_response(
+        request.chat_id,
+        request.message
+    )
 
-        # Add user message
-        conversation_history.append(
-            {
-                "role": "user",
-                "content": user_message.message
-            }
-        )
-
-        # Build full conversation
-        messages = [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT
-            }
-        ] + conversation_history
-
-        # Send to AI
-        response = ollama.chat(
-            model="llama3",
-            messages=messages
-        )
-
-        ai_response = response["message"]["content"]
-
-        # Save AI response
-        conversation_history.append(
-            {
-                "role": "assistant",
-                "content": ai_response
-            }
-        )
-
-        return {
-            "response": ai_response
-        }
-
-    except Exception as e:
-
-        return {
-            "error": str(e)
-        }
+    return {
+        "response": response
+    }
